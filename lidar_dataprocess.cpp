@@ -4,16 +4,16 @@
 using namespace std;
 
 // hyperparameter
-// 1. voxel: setLeafSize 크기
-// 2. roi: setFilterLimits 범위
+// 1. roi: setFilterLimits 범위
+// 2. voxel: setLeafSize 크기
 // 3. ransac: setMaxIterations 반복횟수 setDistanceThreshold 거리 임계값
 // 4. dbscan: 아래의 변수들, tmp.z의 범위
 // rviz의 frame_id는 velodyne
 
 
 /*dbscan clustering 사용을 위한 변수*/
-int minPoints = 4;          //Core Point 기준 필요 인접점 최소 개수
-double epsilon = 0.2;      //Core Point 기준 주변 탐색 반경 
+int minPoints = 3;          //Core Point 기준 필요 인접점 최소 개수
+double epsilon = 0.3;      //Core Point 기준 주변 탐색 반경 
 
 //clustering 사이즈 설정해주어서 사이즈에 해당하는 clustring만 보여줌 - clustering 사이즈에 따라서 인식할 수 있는 물체가 달라짐 
 // min clustering과 maxclustering size를 이용하여 미션시 라바콘과 실제 차량의 차이를 구별 할 수 있지 않을까 생각됨.
@@ -33,7 +33,7 @@ pcl::PassThrough<pcl::PointXYZI> pass; // roi 설정을 위한 pass
 ros::Publisher pub; // dbscan한 결과를 pub
 ros::Publisher boundingBoxPub; // dbscan bounding box rviz를 위한 pub
 
-std::string state = "cruising"; // crusing mode로 시작
+std::string state = "static_obstacle"; // crusing mode로 시작
 
 void state_callback(const std_msgs::String::ConstPtr& msg)
 {
@@ -46,55 +46,54 @@ void cloud_callBack(const sensor_msgs::PointCloud2ConstPtr& input)
     if (state !="cruising")
     {   
         // container for original and filtered data
-        pcl::PCLPointCloud2 * cloud = new pcl::PCLPointCloud2;  // pointcloud2의 pointer
-        pcl::PCLPointCloud2ConstPtr cloudPtr(cloud); // pointer for dynamic cloud
-        pcl::PCLPointCloud2 cloud_filtered; // cloud_filter
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
 
-        //conversion ROS sensor_msg/PointCloud2 -> pcl lib의 PointCloud2 type 
-        pcl_conversions::toPCL(*input, *cloud);
-        
-        // 1. voxel 처리
-        // pcl 의 VoxelGrid 타입
-        pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
-        sor.setInputCloud (cloudPtr);
-        // 샘플링 하는 방법 이거 너무 작게 하면 샘플링 에러 메세지 뜸 고것을 주의 하자
-        //leaf size  1cm 격자의 x, y, z 크기
+        // ros msg를 pointcloud로 변경
+        pcl::fromROSMsg(*input, *cloud);
 
-        if (state == "static_obstacle")
-        {
-            sor.setLeafSize (0.15f, 0.15f, 0.15f); // voxel 크기 설정
-        }
-        else
-        {
-            sor.setLeafSize (0.1f, 0.1f, 0.1f); // voxel 크기 설정
-        }
-        sor.filter(cloud_filtered);
-
-
-        // 2. roi 설정
+        // 1. roi 설정
         // lidar 좌표계 기준 x, y, z 설정 가능
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_out(new pcl::PointCloud<pcl::PointXYZI>);
-        
         //pcl::pointcloud를 pcl::pointcloud<XYZI>::ptr로 변경
-        pcl::fromPCLPointCloud2(cloud_filtered, *cloud_out);
 
         if (state == "static_obstacle")
         {
             // Apply Passthrough Filter
-            pass.setInputCloud (cloud_out);
+            pass.setInputCloud (cloud); // raw data 입력
             pass.setFilterFieldName ("z");
-            pass.setFilterLimits (-0.15, 1.5);   // 상하거리
+            pass.setFilterLimits (-2, 2);   // 상하거리
             //pass.setFilterLimitsNegative (true);
             pass.filter (*cloud_out);
 
             // // Apply Passthrough Filter
             pass.setFilterFieldName ("x");
-            pass.setFilterLimits (0, 100);  // 앞뒤거리
+            pass.setFilterLimits (0, 60);  // 앞뒤거리
             pass.setInputCloud (cloud_out);
             pass.filter (*cloud_out);
 
             pass.setFilterFieldName ("y");
-            pass.setFilterLimits (-15, 15); //좌우거리
+            pass.setFilterLimits (-8.0, 8.0); //좌우거리
+            // pass.setFilterLimitsNegative (true);
+            pass.setInputCloud (cloud_out);
+            pass.filter (*cloud_out);
+        }
+        else if (state == "rotary")
+        {
+            // Apply Passthrough Filter
+            pass.setInputCloud (cloud);
+            pass.setFilterFieldName ("z");
+            pass.setFilterLimits (-2, 2);   // 상하거리
+            //pass.setFilterLimitsNegative (true);
+            pass.filter (*cloud_out);
+
+            // // Apply Passthrough Filter
+            pass.setFilterFieldName ("x");
+            pass.setFilterLimits (0, 60);  // 앞뒤거리
+            pass.setInputCloud (cloud_out);
+            pass.filter (*cloud_out);
+
+            pass.setFilterFieldName ("y");
+            pass.setFilterLimits (-8.0, 8.0); //좌우거리
             // pass.setFilterLimitsNegative (true);
             pass.setInputCloud (cloud_out);
             pass.filter (*cloud_out);
@@ -102,7 +101,7 @@ void cloud_callBack(const sensor_msgs::PointCloud2ConstPtr& input)
         else // end
         {
             // Apply Passthrough Filter
-            pass.setInputCloud (cloud_out);
+            pass.setInputCloud (cloud);
             pass.setFilterFieldName ("z");
             pass.setFilterLimits (-5, 13);   // 상하거리
             //pass.setFilterLimitsNegative (true);
@@ -120,6 +119,38 @@ void cloud_callBack(const sensor_msgs::PointCloud2ConstPtr& input)
             pass.setInputCloud (cloud_out);
             pass.filter (*cloud_out);
         }
+        
+        // 2. voxel 처리
+        // pcl 의 VoxelGrid 타입
+        pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
+        pcl::PCLPointCloud2::Ptr cloud_voxel(new pcl::PCLPointCloud2);
+
+        // voxel은 <XYZI>가 안 들어간다.
+        pcl::PCLPointCloud2::Ptr cloud_out_PCL2(new pcl::PCLPointCloud2);
+
+        pcl::toPCLPointCloud2(*cloud_out, *cloud_out_PCL2);
+        
+        sor.setInputCloud (cloud_out_PCL2);
+        // 샘플링 하는 방법 이거 너무 작게 하면 샘플링 에러 메세지 뜸 고것을 주의 하자
+        //leaf size  1cm 격자의 x, y, z 크기
+
+        if (state == "static_obstacle")
+        {
+            sor.setLeafSize (0.2f, 0.2f, 0.2f); // voxel 크기 설정
+        }
+        else if (state == "rotary")
+        {
+            sor.setLeafSize (0.2f, 0.2f, 0.2f); // voxel 크기 설정
+        }
+        else
+        {
+            sor.setLeafSize (0.1f, 0.1f, 0.1f); // voxel 크기 설정
+        }
+
+        sor.filter(*cloud_voxel);
+
+        // Pointcloud2를 <XYZI>로 변경
+        pcl::fromPCLPointCloud2(*cloud_voxel, *cloud_out);
 
         // 3. ransac
         pcl::PointCloud<pcl::PointXYZI>::Ptr inlierPoints (new pcl::PointCloud<pcl::PointXYZI>),
@@ -135,7 +166,7 @@ void cloud_callBack(const sensor_msgs::PointCloud2ConstPtr& input)
         seg.setOptimizeCoefficients (true);       //(옵션) // Enable model coefficient refinement (optional).
         seg.setModelType (pcl::SACMODEL_PLANE);    //적용 모델  // Configure the object to look for a plane.
         seg.setMethodType (pcl::SAC_RANSAC);       //적용 방법   // Use RANSAC method.
-        seg.setMaxIterations (3000);               //최대 실행 수
+        seg.setMaxIterations (2000);               //최대 실행 수
         seg.setDistanceThreshold (0.08);          //inlier로 처리할 거리 정보   // Set the maximum allowed distance to the model.
         //seg.setRadiusLimits(0, 0.1);     // cylinder경우, Set minimum and maximum radii of the cylinder.
         seg.setInputCloud (cloud_out);                //입력 
@@ -200,7 +231,7 @@ void cloud_callBack(const sensor_msgs::PointCloud2ConstPtr& input)
                 tmp.y = inlierPoints_neg->points[*pit].y;
                 tmp.z = inlierPoints_neg->points[*pit].z;
 
-                if (tmp.z < -0.3) // dbscan의 roi를 설정 -> 제거되지 않은 지면 없애기
+                if (tmp.z < -0.1) // dbscan의 roi를 설정 -> 제거되지 않은 지면 없애기
                 {
                     continue;
                 }
@@ -232,7 +263,7 @@ void cloud_callBack(const sensor_msgs::PointCloud2ConstPtr& input)
 
                 if ( (xMinBoundingBox < x_len && x_len < xMaxBoundingBox) && (yMinBoundingBox < y_len && y_len < yMaxBoundingBox) && (zMinBoundingBox < z_len && z_len < zMaxBoundingBox) ) 
                 {
-                    boundingBox.header.frame_id = "velodyne";
+                    boundingBox.header.frame_id = "macaron";
                     boundingBox.header.stamp = ros::Time();
                     boundingBox.ns = cluster_counts; //ns = namespace
                     boundingBox.id = cluster_id; 
@@ -277,8 +308,10 @@ void cloud_callBack(const sensor_msgs::PointCloud2ConstPtr& input)
 
         sensor_msgs::PointCloud2 cluster;
         pcl_conversions::moveFromPCL(cloud_p, cluster);
+
         // pcl::toROSMsg(cloud_p, cluster);
-        cluster.header.frame_id = "velodyne";
+        cluster.header.frame_id = "macaron";
+        cluster.header.stamp = input->header.stamp;
 
         pub.publish(cluster); // 값을 전달하는 것
         boundingBoxPub.publish(boundingBoxArray);
