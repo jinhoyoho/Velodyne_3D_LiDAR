@@ -101,5 +101,7 @@ Dbscan을 이용해서 해당 점들을 하나의 군집(clustering)으로 만�
 (현재는 국민대 FOSCAR의 코드를 받아 사용하고 있지만 코드 수정 가능성이 농후)
 
 - 참고자료
-  --https://gaussian37.github.io/autodrive-lidar-intro/
-  --https://cs-kookmin-club.tistory.com/144
+
+  -https://gaussian37.github.io/autodrive-lidar-intro/
+
+  -https://cs-kookmin-club.tistory.com/144
