@@ -1,24 +1,29 @@
+#include <ros/ros.h>
 #include <iostream>
 #include <cmath>
 #include <vector>
-#include <ros/ros.h>
+#include <set>
+#include <unordered_set>
+#include <boost/format.hpp>
 #include <std_msgs/String.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <velodyne_pcl/point_types.h>
+
+#include <mlpack.hpp>
+#include <mlpack/methods/dbscan/dbscan.hpp>
+#include <armadillo>
+
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <velodyne_pointcloud/point_types.h>
 #include <pcl/common/common.h>
 #include <pcl/common/centroid.h>
 #include <pcl/common/transforms.h>
 #include <pcl/console/parse.h>
-#include <set>
 #include <pcl/io/pcd_io.h>
-#include <boost/format.hpp>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/point_cloud.h>
-#include <unordered_set>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
